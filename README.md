@@ -2,7 +2,7 @@
 
 Filament Theme Studio is an open-source package that will provide a visual theme editor for Filament panels, including structured settings, advanced CSS editing, previews, controlled publishing, and version history.
 
-The project is currently at **lot 2**: the package foundation and the theme storage engine are ready. Themes can be created, duplicated, activated per panel, versioned, restored, cached, and deleted through a framework-independent service API. The visual editor and CSS generation/injection will be implemented in later lots.
+The project is currently at **lot 3**: the package includes a native Filament administration interface for creating, editing, activating, duplicating, deleting, snapshotting, and restoring panel themes. CSS generation, preview, and runtime injection will be implemented in later lots.
 
 ## Requirements
 
@@ -80,11 +80,71 @@ use Hforlife\FilamentThemeStudio\FilamentThemeStudioPlugin;
 public function panel(Panel $panel): Panel
 {
     return $panel
-        ->plugin(FilamentThemeStudioPlugin::make());
+        ->plugin(
+            FilamentThemeStudioPlugin::make()
+                ->navigationLabel('Theme Studio')
+                ->navigationGroup('Appearance')
+                ->navigationSort(100)
+                ->authorizeUsing(fn (): bool => auth()->user()?->is_admin === true),
+        );
 }
 ```
 
-This lot intentionally registers no pages, assets, styles, or scripts. Its migrations are publishable but are never run automatically.
+The plugin registers its resource only on panels where it is attached. Navigation can be disabled with `->hideFromNavigation()` while keeping direct access available to authorized users. Without an `authorizeUsing()` callback, access requires the authenticated user to pass Laravel's `manage-theme-studio` ability. Authorization is enforced for navigation, direct page access, records, relation managers, and actions.
+
+## Theme Studio interface
+
+The resource is scoped to the current Filament panel. Its editor covers the canonical light and dark palettes, sidebar colors and width, local font families and base size, component radii, content width, and interface density. Values are validated on the server and unknown settings keys are preserved when an existing theme is edited.
+
+The canonical `settings` document is:
+
+```php
+[
+    'colors' => [
+        'primary' => '#3b82f6',
+        'secondary' => '#64748b',
+        'success' => '#22c55e',
+        'warning' => '#f59e0b',
+        'danger' => '#ef4444',
+        'background' => '#ffffff',
+        'surface' => '#ffffff',
+        'text' => '#111827',
+        'sidebar_background' => '#ffffff',
+        'sidebar_text' => '#374151',
+    ],
+    'dark_colors' => [
+        'background' => '#09090b',
+        'surface' => '#18181b',
+        'text' => '#fafafa',
+        'sidebar_background' => '#18181b',
+        'sidebar_text' => '#e4e4e7',
+    ],
+    'typography' => ['font_family' => 'Inter', 'base_size' => 16],
+    'shape' => [
+        'border_radius' => 8,
+        'button_radius' => 8,
+        'input_radius' => 8,
+        'card_radius' => 12,
+    ],
+    'layout' => [
+        'sidebar_width' => 288,
+        'content_max_width' => 'full',
+        'density' => 'comfortable',
+    ],
+]
+```
+
+This stable, language-independent structure prepares the data consumed by the CSS engine planned for lot 4.
+
+The list and edit pages expose the following operations:
+
+- activate or deactivate a panel theme;
+- duplicate a theme without copying its history or active state;
+- create an immutable snapshot;
+- browse version history and restore a snapshot after automatic backup;
+- delete a theme and its version history after confirmation.
+
+The interface ships in English and French and uses only native Filament components. This release does not inject, compile, sanitize, or preview CSS.
 
 ## Theme storage
 
@@ -165,7 +225,7 @@ return [
 
 The active theme cache stores only a theme identifier under a deterministic, panel-specific key such as `filament-theme-studio:panel:admin:active-theme`; the model is reloaded on every read. A `null` store uses Laravel's default cache store, a TTL of `0` caches forever, and `enabled => false` bypasses caching. Mutating operations invalidate only the affected panel.
 
-At this stage, `custom_css` is stored exactly as supplied but is **not injected, parsed, sanitized, or compiled**.
+At this stage, `custom_css` is stored exactly as supplied but is **not exposed by the visual editor, injected, parsed, sanitized, or compiled**.
 
 ## Development and testing
 

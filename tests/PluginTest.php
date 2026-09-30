@@ -4,6 +4,7 @@ use Filament\Contracts\Plugin;
 use Filament\Panel;
 use Hforlife\FilamentThemeStudio\FilamentThemeStudioPlugin;
 use Hforlife\FilamentThemeStudio\FilamentThemeStudioServiceProvider;
+use Hforlife\FilamentThemeStudio\Resources\ThemeResource;
 use Hforlife\FilamentThemeStudio\Services\ThemeCache;
 use Hforlife\FilamentThemeStudio\Services\ThemeManager;
 use Illuminate\Support\ServiceProvider;
@@ -57,5 +58,6 @@ it('registers and boots in a panel without error', function () {
     $plugin->register($panel);
     $plugin->boot($panel);
 
-    expect($panel->getPlugin('filament-theme-studio'))->toBe($plugin);
+    expect($panel->getPlugin('filament-theme-studio'))->toBe($plugin)
+        ->and($panel->getResources())->toContain(ThemeResource::class);
 });

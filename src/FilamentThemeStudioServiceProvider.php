@@ -16,6 +16,7 @@ class FilamentThemeStudioServiceProvider extends PackageServiceProvider
         $package
             ->name('filament-theme-studio')
             ->hasConfigFile()
+            ->hasTranslations()
             ->hasMigrations([
                 'create_filament_theme_studio_themes_table',
                 'create_filament_theme_studio_theme_versions_table',
