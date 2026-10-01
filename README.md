@@ -2,7 +2,7 @@
 
 Filament Theme Studio is an open-source package that will provide a visual theme editor for Filament panels, including structured settings, advanced CSS editing, previews, controlled publishing, and version history.
 
-The project is currently at **lot 3**: the package includes a native Filament administration interface for creating, editing, activating, duplicating, deleting, snapshotting, and restoring panel themes. CSS generation, preview, and runtime injection will be implemented in later lots.
+The project is currently at **lot 4**: validated structured settings are compiled into deterministic CSS and applied to the active theme's Filament panel. Advanced custom CSS editing and live preview remain planned for later lots.
 
 ## Requirements
 
@@ -134,7 +134,7 @@ The canonical `settings` document is:
 ]
 ```
 
-This stable, language-independent structure prepares the data consumed by the CSS engine planned for lot 4.
+This stable, language-independent structure is the only input consumed by the CSS engine.
 
 The list and edit pages expose the following operations:
 
@@ -144,7 +144,23 @@ The list and edit pages expose the following operations:
 - browse version history and restore a snapshot after automatic backup;
 - delete a theme and its version history after confirmation.
 
-The interface ships in English and French and uses only native Filament components. This release does not inject, compile, sanitize, or preview CSS.
+The interface ships in English and French and uses only native Filament components.
+
+## Structured CSS engine
+
+When a panel has the plugin and an active theme, the official `PanelsRenderHook::STYLES_AFTER` hook adds a versioned external stylesheet link. No link is rendered for pluginless panels, disabled CSS, or panels without an active theme. The endpoint is:
+
+```text
+/filament-theme-studio/styles/{panelId}.css?version={SHA-256}
+```
+
+The response uses `text/css`, `X-Content-Type-Options: nosniff`, configurable HTTP cache headers, a strong SHA-256 `ETag`, and conditional `304 Not Modified` responses. It resolves only the active theme for the requested, registered plugin panel; callers cannot select an arbitrary theme.
+
+The compiler exposes plugin-owned `--fts-*` variables for semantic colors, light and dark surfaces, typography, radii, sidebar width, content width, and density. It also generates deterministic Filament palettes (`50` through `950`) for primary, success, warning, and danger colors. Palette interpolation is intentionally lightweight and does not claim automatic WCAG compliance.
+
+Compatibility relies first on Filament's stable color, font, and sidebar variables. The few direct component hooks are centralized in `CssCompiler`: `.fi-body`, `.fi-sidebar`, `.fi-main`, `.fi-simple-main`, `.fi-section`, `.fi-ta-ctn`, `.fi-modal-window`, `.fi-btn`, `.fi-input-wrp`, `.fi-input`, `.fi-badge`, and `.fi-dropdown-panel`. These hooks exist in both Filament 4 and 5 but may need adaptation for a future major release.
+
+Every value is reconstructed from validated allowlists or bounded numeric values. Invalid legacy database settings cause an atomic fallback to canonical defaults. No selector, declaration, URL, HTML, remote font, `@import`, or `custom_css` value is accepted by the compiler.
 
 ## Theme storage
 
@@ -220,12 +236,21 @@ return [
     'versions' => [
         'limit' => 20,
     ],
+
+    'css' => [
+        'enabled' => true,
+        'route_prefix' => 'filament-theme-studio/styles',
+        'cache_control' => 'public, max-age=3600',
+        'compiler_version' => '1',
+    ],
 ];
 ```
 
-The active theme cache stores only a theme identifier under a deterministic, panel-specific key such as `filament-theme-studio:panel:admin:active-theme`; the model is reloaded on every read. A `null` store uses Laravel's default cache store, a TTL of `0` caches forever, and `enabled => false` bypasses caching. Mutating operations invalidate only the affected panel.
+The active theme cache stores only a theme identifier under a deterministic, panel-specific key such as `filament-theme-studio:panel:admin:active-theme`; the model is reloaded on every read. Compiled CSS uses a separate key containing compiler version, panel, theme, and normalized-settings fingerprint, and its value is a scalar array rather than a serialized package object. Invalid or legacy entries are discarded and rebuilt automatically, including after a package upgrade. A `null` store uses Laravel's default cache store, a TTL of `0` caches forever, and `enabled => false` bypasses both caches. Successful update, activation, deactivation, restoration, and deletion operations invalidate only the affected panel after database writes complete.
 
-At this stage, `custom_css` is stored exactly as supplied but is **not exposed by the visual editor, injected, parsed, sanitized, or compiled**.
+Set `css.enabled` to `false` to disable both the stylesheet link and endpoint. `route_prefix` accepts only local path segments, and `compiler_version` can be incremented when a future compiler format must invalidate old entries.
+
+At this stage, `custom_css` is stored exactly as supplied but is **not exposed by the visual editor, injected, parsed, sanitized, or compiled**. Remote fonts are never loaded, and no Node, Vite, Tailwind, or PostCSS process runs at request time.
 
 ## Development and testing
 

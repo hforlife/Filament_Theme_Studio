@@ -19,6 +19,7 @@ class ThemeManager
     public function __construct(
         private readonly ConnectionInterface $database,
         private readonly ThemeCache $cache,
+        private readonly CompiledCssCache $compiledCss,
     ) {}
 
     /** @param array<string, mixed> $settings */
@@ -57,7 +58,7 @@ class ThemeManager
             throw $exception;
         }
 
-        $this->cache->forget($panelId);
+        $this->forgetPanelCaches($panelId);
 
         return $theme;
     }
@@ -100,7 +101,7 @@ class ThemeManager
             throw $exception;
         }
 
-        $this->cache->forget($theme->panel_id);
+        $this->forgetPanelCaches($theme->panel_id);
 
         return $theme->refresh();
     }
@@ -150,7 +151,7 @@ class ThemeManager
             return $lockedTheme->refresh();
         }, 3);
 
-        $this->cache->forget($panelId);
+        $this->forgetPanelCaches($panelId);
 
         return $activated;
     }
@@ -173,7 +174,7 @@ class ThemeManager
                 ->update($attributes);
         }, 3);
 
-        $this->cache->forget($panelId);
+        $this->forgetPanelCaches($panelId);
     }
 
     public function createVersion(
@@ -225,7 +226,7 @@ class ThemeManager
             return $lockedTheme->refresh();
         }, 3);
 
-        $this->cache->forget($panelId);
+        $this->forgetPanelCaches($panelId);
 
         return $restored;
     }
@@ -241,7 +242,7 @@ class ThemeManager
         $panelId = $theme->panel_id;
 
         $this->database->transaction(fn (): ?bool => $theme->delete(), 3);
-        $this->cache->forget($panelId);
+        $this->forgetPanelCaches($panelId);
     }
 
     private function createVersionSnapshot(
@@ -258,6 +259,12 @@ class ThemeManager
             'change_note' => $changeNote,
             'created_by' => $this->actorId($createdBy),
         ]);
+    }
+
+    private function forgetPanelCaches(string $panelId): void
+    {
+        $this->cache->forget($panelId);
+        $this->compiledCss->forgetPanel($panelId);
     }
 
     /** @param array<int> $preserveVersionIds */

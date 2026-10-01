@@ -4,6 +4,17 @@ All notable changes to `hforlife/filament-theme-studio` will be documented in th
 
 ## Unreleased
 
+## 0.4.0 - 2026-10-01
+
+- Add deterministic, validated CSS compilation from the canonical structured theme settings.
+- Add local color palette generation and Filament-compatible semantic color variables.
+- Load a versioned external stylesheet only for active themes on panels that registered the plugin.
+- Add a panel-isolated CSS route with strict identifiers, MIME and `nosniff` headers, HTTP caching, ETags, and 304 responses.
+- Add a separate compiled CSS cache with compiler-versioned keys and post-transaction invalidation.
+- Store compiled CSS cache entries as validated scalar arrays so stale serialized package objects are safely discarded and rebuilt after upgrades.
+- Add safe fallback behavior for corrupt legacy settings and exclude `custom_css` completely.
+- Add compiler, injection resistance, cache, HTTP, panel-link, ETag, and Filament 4/5 compatibility tests.
+
 ## 0.3.0 - 2026-09-30
 
 - Add the panel-scoped Filament Theme resource with native list, create, and edit pages.

@@ -7,7 +7,9 @@ namespace Hforlife\FilamentThemeStudio;
 use Closure;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
+use Filament\View\PanelsRenderHook;
 use Hforlife\FilamentThemeStudio\Resources\ThemeResource;
+use Hforlife\FilamentThemeStudio\Services\ThemeStylesheet;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 
@@ -38,11 +40,16 @@ class FilamentThemeStudioPlugin implements Plugin
         $panel->resources([
             ThemeResource::class,
         ]);
+
+        $panel->renderHook(
+            PanelsRenderHook::STYLES_AFTER,
+            fn () => app(ThemeStylesheet::class)->linkForPanel($panel),
+        );
     }
 
     public function boot(Panel $panel): void
     {
-        // Intentionally empty until later feature lots boot panel resources.
+        // The stylesheet hook is registered during panel configuration.
     }
 
     public function navigationLabel(string $label): static
