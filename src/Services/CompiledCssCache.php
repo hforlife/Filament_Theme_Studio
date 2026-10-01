@@ -17,13 +17,13 @@ final readonly class CompiledCssCache
         private CssCompiler $compiler,
     ) {}
 
-    public function get(Theme $theme): CompiledThemeCss
+    public function get(Theme $theme, bool $includeCustomCss = true): CompiledThemeCss
     {
         if (! $this->enabled()) {
-            return $this->compiler->compile($theme);
+            return $this->compiler->compile($theme, $includeCustomCss);
         }
 
-        $key = $this->key($theme);
+        $key = $this->key($theme, $includeCustomCss);
         $repository = $this->repository();
         $ttl = (int) config('filament-theme-studio.cache.ttl', 3600);
         $cached = $repository->get($key);
@@ -46,7 +46,7 @@ final readonly class CompiledCssCache
             $repository->forget($key);
         }
 
-        $compiled = $this->compiler->compile($theme);
+        $compiled = $this->compiler->compile($theme, $includeCustomCss);
 
         if ($ttl === 0) {
             $repository->forever($key, $compiled->toArray());
@@ -87,10 +87,10 @@ final readonly class CompiledCssCache
         $repository->forget($indexKey);
     }
 
-    public function key(Theme $theme): string
+    public function key(Theme $theme, bool $includeCustomCss = true): string
     {
         $prefix = rtrim((string) config('filament-theme-studio.cache.prefix', 'filament-theme-studio'), ':');
-        $hash = $this->compiler->settingsFingerprint($theme);
+        $hash = $this->compiler->settingsFingerprint($theme, $includeCustomCss);
 
         return sprintf(
             '%s:compiled-css:v%s:panel:%s:theme:%s:%s',

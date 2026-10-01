@@ -32,7 +32,7 @@ final class ThemeStylesheetController
             return $this->response('', hash('sha256', ''), $request);
         }
 
-        $compiled = $cache->get($theme);
+        $compiled = $cache->get($theme, $request->boolean('custom', true));
 
         return $this->response($compiled->content, $compiled->fingerprint, $request);
     }

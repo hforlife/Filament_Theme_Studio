@@ -50,6 +50,26 @@ it('can hide navigation without granting or revoking direct access', function ()
         ->and(ThemeResource::canAccess())->toBeTrue();
 });
 
+it('keeps custom CSS authorization separate from general theme access', function () {
+    config()->set('filament-theme-studio.custom_css.enabled', true);
+    themeStudioPanel(
+        FilamentThemeStudioPlugin::make()
+            ->authorizeUsing(fn (): bool => true)
+            ->authorizeCustomCssUsing(fn (): bool => false),
+    );
+
+    expect(ThemeResource::canAccess())->toBeTrue()
+        ->and(ThemeResource::canManageCustomCss())->toBeFalse();
+
+    themeStudioPanel(
+        FilamentThemeStudioPlugin::make()
+            ->authorizeUsing(fn (): bool => true)
+            ->authorizeCustomCssUsing(fn (): bool => true),
+    );
+
+    expect(ThemeResource::canManageCustomCss())->toBeTrue();
+});
+
 it('scopes resource queries and record authorization to the current panel', function () {
     themeStudioPanel(FilamentThemeStudioPlugin::make()->authorizeUsing(fn (): bool => true));
     $admin = Theme::factory()->forPanel('admin')->create();

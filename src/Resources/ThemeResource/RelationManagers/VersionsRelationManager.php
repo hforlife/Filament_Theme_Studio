@@ -41,13 +41,19 @@ class VersionsRelationManager extends RelationManager
                         abort_unless($owner instanceof Theme, 404);
                         ThemeResource::authorizeRecord($owner);
                         abort_unless((int) $record->theme_id === (int) $owner->getKey(), 403);
+                        if (filled($record->custom_css) || $record->custom_css_enabled) {
+                            ThemeResource::authorizeCustomCss($owner);
+                        }
 
                         $id = Auth::id();
                         $actor = is_int($id) || is_string($id) ? $id : null;
-                        app(ThemeManager::class)->restoreVersion($owner, $record, $actor);
+                        $restored = app(ThemeManager::class)->restoreVersion($owner, $record, $actor);
+                        $notification = $record->custom_css_enabled && ! $restored->custom_css_enabled
+                            ? 'restored_custom_css_disabled'
+                            : 'restored';
 
                         Notification::make()->success()
-                            ->title(__('filament-theme-studio::theme-studio.notifications.restored'))
+                            ->title(__("filament-theme-studio::theme-studio.notifications.{$notification}"))
                             ->send();
 
                         $this->redirect(ThemeResource::getUrl('edit', ['record' => $owner]));

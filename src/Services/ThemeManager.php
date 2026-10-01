@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Hforlife\FilamentThemeStudio\Services;
 
 use Hforlife\FilamentThemeStudio\Exceptions\DuplicateThemeSlug;
+use Hforlife\FilamentThemeStudio\Exceptions\InvalidCustomCss;
 use Hforlife\FilamentThemeStudio\Exceptions\InvalidThemeSettings;
 use Hforlife\FilamentThemeStudio\Exceptions\ThemeVersionNotFound;
 use Hforlife\FilamentThemeStudio\Models\Theme;
 use Hforlife\FilamentThemeStudio\Models\ThemeVersion;
+use Hforlife\FilamentThemeStudio\Support\CustomCssConfiguration;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
@@ -20,6 +22,8 @@ class ThemeManager
         private readonly ConnectionInterface $database,
         private readonly ThemeCache $cache,
         private readonly CompiledCssCache $compiledCss,
+        private readonly CustomCssValidator $customCssValidator,
+        private readonly CustomCssPreview $customCssPreview,
     ) {}
 
     /** @param array<string, mixed> $settings */
@@ -30,6 +34,7 @@ class ThemeManager
         ?string $customCss = null,
         ?string $slug = null,
         int | string | null $createdBy = null,
+        bool $customCssEnabled = false,
     ): Theme {
         $panelId = $this->required($panelId, 'Panel ID');
         $name = $this->required($name, 'Theme name');
@@ -46,6 +51,7 @@ class ThemeManager
                 'slug' => $slug,
                 'settings' => $settings,
                 'custom_css' => $customCss,
+                'custom_css_enabled' => $customCssEnabled,
                 'is_active' => false,
                 'created_by' => $this->actorId($createdBy),
                 'updated_by' => $this->actorId($createdBy),
@@ -121,7 +127,79 @@ class ThemeManager
             customCss: $theme->custom_css,
             slug: $slug,
             createdBy: $createdBy,
+            customCssEnabled: $theme->custom_css_enabled,
         );
+    }
+
+    public function publishCustomCss(
+        Theme $theme,
+        string $css,
+        bool $enabled = true,
+        int | string | null $updatedBy = null,
+    ): Theme {
+        if (! CustomCssConfiguration::enabled()) {
+            throw new InvalidCustomCss('Custom CSS is disabled by configuration.');
+        }
+
+        $validation = $this->customCssValidator->validate($css);
+        if (! $validation->valid) {
+            throw InvalidCustomCss::fromResult($validation);
+        }
+
+        $panelId = $theme->panel_id;
+        $published = $this->database->transaction(function () use ($theme, $css, $enabled, $updatedBy): Theme {
+            $lockedTheme = $this->lockTheme($theme);
+            $this->createVersionSnapshot($lockedTheme, __('filament-theme-studio::theme-studio.version_notes.before_custom_css_publish'), $updatedBy);
+            $lockedTheme->update([
+                'custom_css' => $css,
+                'custom_css_enabled' => $enabled,
+                'updated_by' => $updatedBy === null ? $lockedTheme->updated_by : $this->actorId($updatedBy),
+            ]);
+            $this->pruneVersions($lockedTheme);
+
+            return $lockedTheme->refresh();
+        }, 3);
+
+        $this->forgetPanelCaches($panelId);
+        $this->customCssPreview->forgetAllForTheme($published);
+
+        return $published;
+    }
+
+    public function setCustomCssEnabled(Theme $theme, bool $enabled, int | string | null $updatedBy = null): Theme
+    {
+        $theme = $this->freshTheme($theme);
+
+        if ($enabled) {
+            $validation = $this->customCssValidator->validate((string) $theme->custom_css);
+            if (! CustomCssConfiguration::enabled() || ! $validation->valid) {
+                throw InvalidCustomCss::fromResult($validation);
+            }
+        }
+
+        return $this->publishCustomCssState($theme, $enabled, $updatedBy);
+    }
+
+    public function deleteCustomCss(Theme $theme, int | string | null $updatedBy = null): Theme
+    {
+        $theme = $this->freshTheme($theme);
+        $panelId = $theme->panel_id;
+        $deleted = $this->database->transaction(function () use ($theme, $updatedBy): Theme {
+            $lockedTheme = $this->lockTheme($theme);
+            $this->createVersionSnapshot($lockedTheme, __('filament-theme-studio::theme-studio.version_notes.before_custom_css_delete'), $updatedBy);
+            $lockedTheme->update([
+                'custom_css' => null,
+                'custom_css_enabled' => false,
+                'updated_by' => $updatedBy === null ? $lockedTheme->updated_by : $this->actorId($updatedBy),
+            ]);
+            $this->pruneVersions($lockedTheme);
+
+            return $lockedTheme->refresh();
+        }, 3);
+        $this->forgetPanelCaches($panelId);
+        $this->customCssPreview->forgetAllForTheme($deleted);
+
+        return $deleted;
     }
 
     public function activateTheme(Theme $theme, int | string | null $updatedBy = null): Theme
@@ -211,6 +289,9 @@ class ThemeManager
             $attributes = [
                 'settings' => $snapshot->settings,
                 'custom_css' => $snapshot->custom_css,
+                'custom_css_enabled' => $snapshot->custom_css_enabled
+                    && CustomCssConfiguration::enabled()
+                    && $this->customCssValidator->validate((string) $snapshot->custom_css)->valid,
             ];
 
             if ($updatedBy !== null) {
@@ -227,6 +308,7 @@ class ThemeManager
         }, 3);
 
         $this->forgetPanelCaches($panelId);
+        $this->customCssPreview->forgetAllForTheme($restored);
 
         return $restored;
     }
@@ -256,6 +338,7 @@ class ThemeManager
             'version' => $latestVersion + 1,
             'settings' => $theme->settings,
             'custom_css' => $theme->custom_css,
+            'custom_css_enabled' => $theme->custom_css_enabled,
             'change_note' => $changeNote,
             'created_by' => $this->actorId($createdBy),
         ]);
@@ -265,6 +348,27 @@ class ThemeManager
     {
         $this->cache->forget($panelId);
         $this->compiledCss->forgetPanel($panelId);
+    }
+
+    private function publishCustomCssState(Theme $theme, bool $enabled, int | string | null $updatedBy): Theme
+    {
+        $panelId = $theme->panel_id;
+        $updated = $this->database->transaction(function () use ($theme, $enabled, $updatedBy): Theme {
+            $lockedTheme = $this->lockTheme($theme);
+            $this->createVersionSnapshot($lockedTheme, __('filament-theme-studio::theme-studio.version_notes.before_custom_css_state'), $updatedBy);
+            $attributes = ['custom_css_enabled' => $enabled];
+            if ($updatedBy !== null) {
+                $attributes['updated_by'] = $this->actorId($updatedBy);
+            }
+            $lockedTheme->update($attributes);
+            $this->pruneVersions($lockedTheme);
+
+            return $lockedTheme->refresh();
+        }, 3);
+        $this->forgetPanelCaches($panelId);
+        $this->customCssPreview->forgetAllForTheme($updated);
+
+        return $updated;
     }
 
     /** @param array<int> $preserveVersionIds */

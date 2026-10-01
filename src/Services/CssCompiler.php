@@ -7,18 +7,28 @@ namespace Hforlife\FilamentThemeStudio\Services;
 use Hforlife\FilamentThemeStudio\Models\Theme;
 use Hforlife\FilamentThemeStudio\Support\CompiledThemeCss;
 use Hforlife\FilamentThemeStudio\Support\CssConfiguration;
+use Hforlife\FilamentThemeStudio\Support\CustomCssConfiguration;
 use Hforlife\FilamentThemeStudio\Support\ThemeSettings;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use JsonException;
 
 final readonly class CssCompiler
 {
-    public function __construct(private ColorPaletteGenerator $palettes) {}
+    public function __construct(
+        private ColorPaletteGenerator $palettes,
+        private CustomCssValidator $customCssValidator,
+    ) {}
 
-    public function compile(Theme $theme): CompiledThemeCss
+    public function compile(Theme $theme, bool $includeCustomCss = true): CompiledThemeCss
     {
         $settings = $this->safeSettings($theme);
         $content = $this->build($settings);
+        $customCss = $includeCustomCss ? $this->customCss($theme) : '';
+
+        if ($customCss !== '') {
+            $content .= "/* Filament Theme Studio: custom CSS */\n{$customCss}\n";
+        }
 
         return new CompiledThemeCss(
             content: $content,
@@ -29,7 +39,7 @@ final readonly class CssCompiler
         );
     }
 
-    public function settingsFingerprint(Theme $theme): string
+    public function settingsFingerprint(Theme $theme, bool $includeCustomCss = true): string
     {
         try {
             $encoded = json_encode($this->safeSettings($theme), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
@@ -37,7 +47,13 @@ final readonly class CssCompiler
             $encoded = '{}';
         }
 
-        return hash('sha256', CssConfiguration::compilerVersion() . '|' . $encoded);
+        $custom = $includeCustomCss ? implode('|', [
+            CustomCssConfiguration::fingerprint(),
+            $theme->custom_css_enabled ? '1' : '0',
+            (string) $theme->custom_css,
+        ]) : 'without-custom-css';
+
+        return hash('sha256', CssConfiguration::compilerVersion() . '|' . $encoded . '|' . $custom);
     }
 
     /** @return array<string, mixed> */
@@ -95,7 +111,7 @@ final readonly class CssCompiler
         ];
 
         return implode("\n", [
-            '/* Filament Theme Studio - generated from structured settings only. */',
+            '/* Filament Theme Studio: structured theme */',
             ':root {',
             $this->declarations($variables),
             '}',
@@ -116,6 +132,27 @@ final readonly class CssCompiler
             '.fi-section-content, .fi-section-header { padding: var(--fts-density-space); }',
             '',
         ]);
+    }
+
+    private function customCss(Theme $theme): string
+    {
+        if (! CustomCssConfiguration::enabled() || ! $theme->custom_css_enabled || trim((string) $theme->custom_css) === '') {
+            return '';
+        }
+
+        $result = $this->customCssValidator->validate((string) $theme->custom_css);
+        if (! $result->valid) {
+            Log::warning('Filament Theme Studio blocked invalid custom CSS during compilation.', [
+                'theme_id' => $theme->getKey(),
+                'panel_id' => $theme->panel_id,
+                'validator_version' => CustomCssConfiguration::VALIDATOR_VERSION,
+                'error_count' => count($result->errors),
+            ]);
+
+            return '';
+        }
+
+        return $result->css;
     }
 
     /** @param array<string, string> $variables */

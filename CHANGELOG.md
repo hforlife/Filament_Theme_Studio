@@ -4,6 +4,17 @@ All notable changes to `hforlife/filament-theme-studio` will be documented in th
 
 ## Unreleased
 
+## 0.5.0 - 2026-10-01
+
+- Add an opt-in, separately authorized custom CSS editor with validation, preview, publication, disable, and deletion actions.
+- Parse CSS with `sabberworm/php-css-parser` in strict mode and enforce property, value, function, selector, and at-rule allowlists.
+- Scope accepted selectors beneath `.fi-body`, block URLs and remote resources, and exclude custom CSS from authentication pages by default.
+- Revalidate custom CSS during compilation and ignore malicious or obsolete database values without exposing their contents in logs.
+- Preserve the custom CSS activation state in themes and immutable snapshots, and safely disable historical CSS that no longer validates.
+- Add user-, panel-, and theme-bound ten-minute previews with random tokens and a restrictive content security policy.
+- Add the `filament-theme-studio:disable-custom-css` emergency recovery command with explicit targets and production confirmation.
+- Include custom CSS security inputs in portable cache fingerprints and add security, workflow, authorization, history, preview, and recovery tests.
+
 ## 0.4.0 - 2026-10-01
 
 - Add deterministic, validated CSS compilation from the canonical structured theme settings.

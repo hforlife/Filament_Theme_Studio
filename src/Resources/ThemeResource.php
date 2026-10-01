@@ -11,6 +11,7 @@ use Filament\Actions\EditAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -28,6 +29,7 @@ use Hforlife\FilamentThemeStudio\Resources\ThemeResource\Pages\EditTheme;
 use Hforlife\FilamentThemeStudio\Resources\ThemeResource\Pages\ListThemes;
 use Hforlife\FilamentThemeStudio\Resources\ThemeResource\RelationManagers\VersionsRelationManager;
 use Hforlife\FilamentThemeStudio\Services\ThemeManager;
+use Hforlife\FilamentThemeStudio\Support\CustomCssConfiguration;
 use Hforlife\FilamentThemeStudio\Support\ThemeSettings;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
@@ -116,6 +118,20 @@ class ThemeResource extends Resource
                             'spacious' => __('filament-theme-studio::theme-studio.options.spacious'),
                         ])->required(),
                 ]),
+            Section::make(__('filament-theme-studio::theme-studio.custom_css.title'))
+                ->description(__('filament-theme-studio::theme-studio.custom_css.warning'))
+                ->visible(fn (): bool => self::canManageCustomCss())
+                ->schema([
+                    Textarea::make('custom_css')
+                        ->label(__('filament-theme-studio::theme-studio.custom_css.editor'))
+                        ->rows(18)
+                        ->maxLength(CustomCssConfiguration::maxBytes())
+                        ->helperText(__('filament-theme-studio::theme-studio.custom_css.help', [
+                            'max' => CustomCssConfiguration::maxBytes(),
+                        ])),
+                    Toggle::make('custom_css_enabled')
+                        ->label(__('filament-theme-studio::theme-studio.custom_css.enabled')),
+                ]),
         ]);
     }
 
@@ -182,6 +198,9 @@ class ThemeResource extends Resource
                     ])
                     ->action(function (Theme $record, array $data): void {
                         self::authorizeRecord($record);
+                        if (filled($record->custom_css) || $record->custom_css_enabled) {
+                            self::authorizeCustomCss($record);
+                        }
                         app(ThemeManager::class)->duplicateTheme($record, (string) $data['name'], (string) $data['slug'], self::actorId());
                         self::success('duplicated');
                     }),
@@ -300,6 +319,17 @@ class ThemeResource extends Resource
     public static function authorizeRecord(Theme $theme): void
     {
         abort_unless(self::canEdit($theme), 403);
+    }
+
+    public static function canManageCustomCss(): bool
+    {
+        return CustomCssConfiguration::enabled() && self::plugin()->isCustomCssAuthorized();
+    }
+
+    public static function authorizeCustomCss(Theme $theme): void
+    {
+        self::authorizeRecord($theme);
+        abort_unless(self::canManageCustomCss(), 403);
     }
 
     private static function belongsToCurrentPanel(Model $record): bool

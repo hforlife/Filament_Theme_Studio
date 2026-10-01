@@ -16,6 +16,7 @@ use LogicException;
  * @property int $version
  * @property array<string, mixed> $settings
  * @property string|null $custom_css
+ * @property bool $custom_css_enabled
  * @property string|null $change_note
  * @property string|null $created_by
  */
@@ -31,6 +32,7 @@ class ThemeVersion extends Model
         'version',
         'settings',
         'custom_css',
+        'custom_css_enabled',
         'change_note',
         'created_by',
     ];
@@ -40,6 +42,7 @@ class ThemeVersion extends Model
     {
         return [
             'settings' => 'array',
+            'custom_css_enabled' => 'boolean',
             'version' => 'integer',
         ];
     }

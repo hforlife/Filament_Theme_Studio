@@ -2,7 +2,7 @@
 
 Filament Theme Studio is an open-source package that will provide a visual theme editor for Filament panels, including structured settings, advanced CSS editing, previews, controlled publishing, and version history.
 
-The project is currently at **lot 4**: validated structured settings are compiled into deterministic CSS and applied to the active theme's Filament panel. Advanced custom CSS editing and live preview remain planned for later lots.
+The project is currently at **lot 5**: trusted administrators can validate, preview, publish, disable, and recover strictly constrained custom CSS in addition to the structured theme.
 
 ## Requirements
 
@@ -85,7 +85,8 @@ public function panel(Panel $panel): Panel
                 ->navigationLabel('Theme Studio')
                 ->navigationGroup('Appearance')
                 ->navigationSort(100)
-                ->authorizeUsing(fn (): bool => auth()->user()?->is_admin === true),
+                ->authorizeUsing(fn (): bool => auth()->user()?->can('manage-theme-studio') ?? false)
+                ->authorizeCustomCssUsing(fn (): bool => auth()->user()?->can('manage-theme-studio-custom-css') ?? false),
         );
 }
 ```
@@ -160,7 +161,42 @@ The compiler exposes plugin-owned `--fts-*` variables for semantic colors, light
 
 Compatibility relies first on Filament's stable color, font, and sidebar variables. The few direct component hooks are centralized in `CssCompiler`: `.fi-body`, `.fi-sidebar`, `.fi-main`, `.fi-simple-main`, `.fi-section`, `.fi-ta-ctn`, `.fi-modal-window`, `.fi-btn`, `.fi-input-wrp`, `.fi-input`, `.fi-badge`, and `.fi-dropdown-panel`. These hooks exist in both Filament 4 and 5 but may need adaptation for a future major release.
 
-Every value is reconstructed from validated allowlists or bounded numeric values. Invalid legacy database settings cause an atomic fallback to canonical defaults. No selector, declaration, URL, HTML, remote font, `@import`, or `custom_css` value is accepted by the compiler.
+Every structured value is reconstructed from validated allowlists or bounded numeric values. Invalid legacy database settings cause an atomic fallback to canonical defaults.
+
+## Custom CSS for trusted administrators
+
+Custom CSS is disabled by default and requires both general Theme Studio access and the separate custom-CSS authorization. It is not a security boundary against a trusted administrator: CSS can still hide controls, imitate interface elements, or make a panel difficult to use. Grant this permission only to trusted administrators.
+
+Enable it explicitly in the published configuration:
+
+```php
+'custom_css' => [
+    'enabled' => true,
+    'max_bytes' => 50_000,
+    'mode' => 'strict',
+    'allow_on_auth_pages' => false,
+    'allow_external_urls' => false,
+    'allowed_media_queries' => true,
+],
+```
+
+The editor uses a native textarea and explicit validation, preview, publication, disable, and delete actions. Preview CSS is validated by the same service as published CSS, stored for ten minutes under a cryptographically random token, bound to the authenticated user, panel, and theme, and displayed on a controlled page with a restrictive CSP. Previewing never changes the database, active theme, or public CSS cache.
+
+Publication validates before starting a transaction, creates a snapshot, stores the editable source, updates its independent activation flag, and invalidates panel caches only after commit. The compiler validates the source again and appends only the normalized output after structured CSS. Invalid CSS inserted directly in the database is logged without its contents and omitted. Restoring an old snapshot restores its source, but leaves it disabled if current rules reject it.
+
+Strict mode allows visual properties such as colors, backgrounds, borders, shadows, opacity, typography, spacing, dimensions, and overflow. Safe functions are `rgb()`, `rgba()`, `hsl()`, `hsla()`, `calc()`, `min()`, `max()`, `clamp()`, and `var()`; variables referenced by `var()` must use `--fts-`, while declarations of new variables must use `--fts-custom-`. Selectors must target Filament `.fi-*` elements and are scoped below `.fi-body`.
+
+URLs, external resources, HTML, control characters, `@import`, `@namespace`, `@font-face`, `@document`, `@keyframes`, `behavior`, `-moz-binding`, `expression()`, script schemes, overlay-oriented properties, pseudo-elements, authentication selectors, hidden fields, and token selectors are rejected. Only recursively validated `@media`, `@supports`, and `@layer` blocks are accepted. Custom CSS is excluded from Filament authentication pages by default.
+
+If custom CSS makes the interface unusable, recover without Filament:
+
+```bash
+php artisan filament-theme-studio:disable-custom-css --panel=admin
+php artisan filament-theme-studio:disable-custom-css --theme=1
+php artisan filament-theme-studio:disable-custom-css --all --force
+```
+
+Exactly one target is required. Production asks for confirmation unless `--force` is supplied. This command disables only custom CSS; structured theme settings remain active.
 
 ## Theme storage
 
@@ -243,6 +279,15 @@ return [
         'cache_control' => 'public, max-age=3600',
         'compiler_version' => '1',
     ],
+
+    'custom_css' => [
+        'enabled' => false,
+        'max_bytes' => 50_000,
+        'mode' => 'strict',
+        'allow_on_auth_pages' => false,
+        'allow_external_urls' => false,
+        'allowed_media_queries' => true,
+    ],
 ];
 ```
 
@@ -250,7 +295,7 @@ The active theme cache stores only a theme identifier under a deterministic, pan
 
 Set `css.enabled` to `false` to disable both the stylesheet link and endpoint. `route_prefix` accepts only local path segments, and `compiler_version` can be incremented when a future compiler format must invalidate old entries.
 
-At this stage, `custom_css` is stored exactly as supplied but is **not exposed by the visual editor, injected, parsed, sanitized, or compiled**. Remote fonts are never loaded, and no Node, Vite, Tailwind, or PostCSS process runs at request time.
+`custom_css` retains the editable source while only the current parser's normalized output is served. The cache fingerprint includes the source, activation state, validator version, strict-mode options, and compiler version. Cached values remain scalar arrays. Remote fonts are never loaded, and no Node, Vite, Tailwind, or PostCSS process runs at request time.
 
 ## Development and testing
 

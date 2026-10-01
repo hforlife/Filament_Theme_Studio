@@ -26,13 +26,13 @@ it('declares its service provider for Laravel package discovery', function () {
         ->toContain(FilamentThemeStudioServiceProvider::class);
 });
 
-it('publishes both migrations without running them automatically', function () {
+it('publishes all migrations without running them automatically', function () {
     $paths = ServiceProvider::pathsToPublish(
         FilamentThemeStudioServiceProvider::class,
         'filament-theme-studio-migrations',
     );
 
-    expect($paths)->toHaveCount(2)
+    expect($paths)->toHaveCount(3)
         ->and(array_keys($paths))->each->toEndWith('.php.stub')
         ->and(array_values($paths))->each->toEndWith('.php');
 });

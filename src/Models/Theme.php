@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $slug
  * @property array<string, mixed> $settings
  * @property string|null $custom_css
+ * @property bool $custom_css_enabled
  * @property bool $is_active
  * @property string|null $created_by
  * @property string|null $updated_by
@@ -37,6 +38,7 @@ class Theme extends Model
         'slug',
         'settings',
         'custom_css',
+        'custom_css_enabled',
         'is_active',
         'created_by',
         'updated_by',
@@ -47,6 +49,7 @@ class Theme extends Model
     {
         return [
             'settings' => 'array',
+            'custom_css_enabled' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

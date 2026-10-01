@@ -24,6 +24,7 @@ class ThemeFactory extends Factory
             'slug' => Str::slug($name),
             'settings' => [],
             'custom_css' => null,
+            'custom_css_enabled' => false,
             'is_active' => false,
             'created_by' => null,
             'updated_by' => null,

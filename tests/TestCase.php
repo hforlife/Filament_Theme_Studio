@@ -58,8 +58,10 @@ class TestCase extends Orchestra
     {
         $themes = require __DIR__ . '/../database/migrations/create_filament_theme_studio_themes_table.php.stub';
         $versions = require __DIR__ . '/../database/migrations/create_filament_theme_studio_theme_versions_table.php.stub';
+        $customCss = require __DIR__ . '/../database/migrations/add_custom_css_enabled_to_filament_theme_studio_tables.php.stub';
 
         $themes->up();
         $versions->up();
+        $customCss->up();
     }
 }

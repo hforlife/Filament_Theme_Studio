@@ -21,6 +21,7 @@ class ThemeVersionFactory extends Factory
             'version' => 1,
             'settings' => [],
             'custom_css' => null,
+            'custom_css_enabled' => false,
             'change_note' => null,
             'created_by' => null,
         ];

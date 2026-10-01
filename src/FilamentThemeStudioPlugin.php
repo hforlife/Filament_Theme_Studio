@@ -25,6 +25,8 @@ class FilamentThemeStudioPlugin implements Plugin
 
     private ?Closure $authorizationCallback = null;
 
+    private ?Closure $customCssAuthorizationCallback = null;
+
     public static function make(): static
     {
         return app(static::class);
@@ -121,5 +123,25 @@ class FilamentThemeStudioPlugin implements Plugin
         }
 
         return Auth::check() && Gate::allows('manage-theme-studio');
+    }
+
+    public function authorizeCustomCssUsing(Closure $callback): static
+    {
+        $this->customCssAuthorizationCallback = $callback;
+
+        return $this;
+    }
+
+    public function isCustomCssAuthorized(): bool
+    {
+        if (! $this->isAuthorized()) {
+            return false;
+        }
+
+        if ($this->customCssAuthorizationCallback instanceof Closure) {
+            return (bool) app()->call($this->customCssAuthorizationCallback);
+        }
+
+        return Auth::check() && Gate::allows('manage-theme-studio-custom-css');
     }
 }

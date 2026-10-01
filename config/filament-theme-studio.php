@@ -20,4 +20,13 @@ return [
         'cache_control' => 'public, max-age=3600',
         'compiler_version' => '1',
     ],
+
+    'custom_css' => [
+        'enabled' => false,
+        'max_bytes' => 50_000,
+        'mode' => 'strict',
+        'allow_on_auth_pages' => false,
+        'allow_external_urls' => false,
+        'allowed_media_queries' => true,
+    ],
 ];
